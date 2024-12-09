@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>アスペクト比を保った動画表示と操作パネル</title>
+    <title>Youtubeの動画を同時に見るやつ</title>
     <style>
       * {
         margin: 0;
@@ -26,35 +26,103 @@
         justify-content: center;
         align-content: center;
         width: 100vw;
-        height: calc(100vh - 60px); /* 操作パネルを除外 */
+        height: 100vh;
         gap: 10px;
       }
-      iframe {
-        border: none;
+      .video-wrapper {
+        position: relative;
+        background: #000;
+        max-width: 100%;
+        max-height: 100%;
+        aspect-ratio: 16 / 9;
+      }
+      .video-wrapper iframe {
         width: 100%;
         height: 100%;
-        object-fit: contain;
-        aspect-ratio: 16 / 9;
-        background: #000;
+        border: none;
       }
-      .controls-container {
+      .delete-button {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+        z-index: 10;
+      }
+      .delete-button:hover {
+        background: #a71d2a;
+      }
+      .modal {
+        display: none;
         position: fixed;
-        bottom: 0;
+        top: 0;
         left: 0;
-        width: 100%;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.8);
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+      .modal.visible {
+        display: flex;
+      }
+      .modal-content {
         background: #1e1e1e;
-        box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.5);
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        width: 90%;
+        max-width: 500px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .modal-content input {
+        padding: 10px;
+        font-size: 14px;
+        border: none;
+        border-radius: 4px;
+        width: 100%;
+        margin-bottom: 10px;
+      }
+      .modal-content .button-container {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
+        gap: 10px;
+        justify-content: space-between;
+      }
+      .modal-content button {
+        flex: 1;
         padding: 10px;
-        transform: translateY(100%);
-        transition: transform 0.3s ease-in-out;
+        font-size: 14px;
+        border: none;
+        border-radius: 4px;
+        background: #007bff;
+        color: #fff;
+        cursor: pointer;
+        min-width: 48%;
       }
-      .controls-container.visible {
-        transform: translateY(0);
+      .modal-content button:hover {
+        background: #0056b3;
       }
-      .toggle-controls {
+      .modal-content .reset {
+        background: #dc3545;
+      }
+      .modal-content .reset:hover {
+        background: #a71d2a;
+      }
+      .modal-content .close-modal {
+        background: #6c757d;
+      }
+      .modal-content .close-modal:hover {
+        background: #5a6268;
+      }
+      .toggle-modal {
         position: fixed;
         bottom: 20px;
         right: 20px;
@@ -67,54 +135,34 @@
         cursor: pointer;
         z-index: 1000;
       }
-      .toggle-controls:hover {
+      .toggle-modal:hover {
         background: #0056b3;
-      }
-      button,
-      input {
-        margin: 5px;
-        padding: 10px 15px;
-        font-size: 14px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-      }
-      input {
-        flex: 1;
-      }
-      button {
-        background: #007bff;
-        color: #fff;
-      }
-      button:hover {
-        background: #0056b3;
-      }
-      .reset {
-        background: #dc3545;
-      }
-      .reset:hover {
-        background: #a71d2a;
       }
     </style>
   </head>
   <body>
     <div class="video-container" id="videoContainer"></div>
-    <div class="controls-container" id="controlsContainer">
-      <input type="text" id="videoUrl" placeholder="YouTube動画のURLを入力" />
-      <button id="addVideo">追加</button>
-      <button id="resetVideos" class="reset">リセット</button>
-      <button id="playAll">すべて再生</button>
-      <button id="pauseAll">すべて一時停止</button>
-      <button id="muteAll">すべてミュート</button>
-      <button id="unmuteAll">すべてミュート解除</button>
+    <div class="modal" id="controlsModal">
+      <div class="modal-content">
+        <input type="text" id="videoUrl" placeholder="YouTube動画のURLを入力" />
+        <div class="button-container">
+          <button id="addVideo">追加</button>
+          <button id="resetVideos" class="reset">リセット</button>
+          <button id="playAll">すべて再生</button>
+          <button id="pauseAll">すべて一時停止</button>
+          <button id="muteAll">すべてミュート</button>
+        </div>
+        <button class="close-modal" id="closeModal">閉じる</button>
+      </div>
     </div>
-    <button class="toggle-controls" id="toggleControls">☰</button>
+    <button class="toggle-modal" id="toggleModal">☰</button>
 
     <script>
       const videoContainer = document.getElementById("videoContainer");
       const videoUrlInput = document.getElementById("videoUrl");
-      const controlsContainer = document.getElementById("controlsContainer");
-      const toggleButton = document.getElementById("toggleControls");
+      const controlsModal = document.getElementById("controlsModal");
+      const toggleModalButton = document.getElementById("toggleModal");
+      const closeModalButton = document.getElementById("closeModal");
 
       function extractVideoId(url) {
         const match = url.match(
@@ -129,35 +177,42 @@
 
         const aspectRatio = 16 / 9;
         const containerWidth = window.innerWidth;
-        const containerHeight = window.innerHeight - 60; // 操作パネルの高さを除外
+        const containerHeight = window.innerHeight;
 
-        let rows = Math.ceil(
-          Math.sqrt(
-            (videoCount * containerHeight) / (containerWidth * aspectRatio)
-          )
-        );
-        let cols = Math.ceil(videoCount / rows);
+        let cols = videoCount === 1 ? 1 : Math.ceil(Math.sqrt(videoCount));
+        let rows = Math.ceil(videoCount / cols);
 
         const maxVideoWidth = containerWidth / cols;
         const maxVideoHeight = containerHeight / rows;
 
-        const videoWidth = Math.min(
+        videoContainer.style.gridTemplateColumns = `repeat(${cols}, ${Math.min(
           maxVideoWidth,
           maxVideoHeight * aspectRatio
-        );
-        const videoHeight = videoWidth / aspectRatio;
-
-        videoContainer.style.gridTemplateColumns = `repeat(${cols}, ${videoWidth}px)`;
-        videoContainer.style.gridTemplateRows = `repeat(${rows}, ${videoHeight}px)`;
+        )}px)`;
+        videoContainer.style.gridTemplateRows = `repeat(${rows}, auto)`;
       }
 
       document.getElementById("addVideo").addEventListener("click", () => {
         const videoId = extractVideoId(videoUrlInput.value.trim());
         if (videoId) {
+          const videoWrapper = document.createElement("div");
+          videoWrapper.className = "video-wrapper";
+
           const iframe = document.createElement("iframe");
           iframe.src = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
           iframe.allowFullscreen = true;
-          videoContainer.appendChild(iframe);
+
+          const deleteButton = document.createElement("button");
+          deleteButton.className = "delete-button";
+          deleteButton.textContent = "削除";
+          deleteButton.addEventListener("click", () => {
+            videoWrapper.remove();
+            adjustVideoGrid();
+          });
+
+          videoWrapper.appendChild(iframe);
+          videoWrapper.appendChild(deleteButton);
+          videoContainer.appendChild(videoWrapper);
           adjustVideoGrid();
           videoUrlInput.value = "";
         } else {
@@ -197,17 +252,18 @@
         });
       });
 
-      document.getElementById("unmuteAll").addEventListener("click", () => {
-        document.querySelectorAll("iframe").forEach((iframe) => {
-          iframe.contentWindow.postMessage(
-            '{"event":"command","func":"unMute","args":""}',
-            "*"
-          );
-        });
+      toggleModalButton.addEventListener("click", () => {
+        controlsModal.classList.toggle("visible");
       });
 
-      toggleButton.addEventListener("click", () => {
-        controlsContainer.classList.toggle("visible");
+      closeModalButton.addEventListener("click", () => {
+        controlsModal.classList.remove("visible");
+      });
+
+      controlsModal.addEventListener("click", (event) => {
+        if (event.target === controlsModal) {
+          controlsModal.classList.remove("visible");
+        }
       });
 
       window.addEventListener("resize", adjustVideoGrid);
