@@ -261,6 +261,17 @@
       }
 
       function createVideoItem(videoId, showChat = false) {
+        // デバッグ用：生成されるURLをコンソールに出力
+        console.log("Video ID:", videoId);
+        console.log(
+          "Video URL:",
+          `https://www.youtube.com/embed/${videoId}?enablejsapi=1`
+        );
+        console.log(
+          "Chat URL:",
+          `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}`
+        );
+
         const videoItem = document.createElement("div");
         videoItem.className = "video-item";
         videoItem.dataset.videoId = videoId;
