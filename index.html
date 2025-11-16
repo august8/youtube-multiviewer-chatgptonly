@@ -335,10 +335,6 @@
             YouTube動画は±5秒/10秒のシークボタンで配信のズレを調整できます。
           </p>
         </div>
-        <div class="feature-item">
-          <h3>🎨 ダークモード対応</h3>
-          <p>ブラウザの設定に応じてチャットのテーマが自動調整されます。</p>
-        </div>
       </div>
 
       <button class="start-button" id="startButton">使い始める</button>
@@ -372,7 +368,7 @@
             color: #888;
           "
         >
-          v1.4.2
+          v1.5.1
         </div>
       </div>
     </div>
@@ -403,10 +399,8 @@
 
       // ユーティリティ関数（イベントリスナーより先に定義）
       function isDarkMode() {
-        return (
-          window.matchMedia &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches
-        );
+        // ダークモード固定
+        return true;
       }
 
       function detectPlatform(url) {
