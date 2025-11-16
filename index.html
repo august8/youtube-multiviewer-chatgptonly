@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="frame-src https://www.youtube.com https://www.youtube-nocookie.com;"
+      content="frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv https://www.twitch.tv;"
     />
     <title>Youtubeの動画を同時に見るやつ</title>
     <style>
@@ -328,6 +328,18 @@
           <button id="resetVideos" class="reset">リセット</button>
         </div>
         <button class="close-modal" id="closeModal">閉じる</button>
+        <div
+          style="
+            text-align: center;
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+            font-size: 12px;
+            color: #888;
+          "
+        >
+          v1.0.0
+        </div>
       </div>
     </div>
     <button class="toggle-modal" id="toggleModal">☰</button>
