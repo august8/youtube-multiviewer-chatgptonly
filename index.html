@@ -321,8 +321,8 @@
         chatWrapper.className = `chat-wrapper${showChat ? " visible" : ""}`;
 
         const chatIframe = document.createElement("iframe");
-        // embed_domainパラメータを削除してシンプルに
-        chatIframe.src = `https://www.youtube.com/live_chat?v=${videoId}`;
+        // ポップアウト形式のURL（is_popout=1が必須）
+        chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}`;
         chatIframe.allow =
           "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
 
