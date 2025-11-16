@@ -313,7 +313,7 @@
             color: #888;
           "
         >
-          v1.2.0
+          v1.3.0
         </div>
       </div>
     </div>
@@ -388,19 +388,29 @@
       }
 
       function extractTwitchChannel(url) {
-        // twitch.tv/channelname のパターンを抽出
-        const patterns = [
+        // twitch.tv/videos/12345 のパターン（VOD）
+        const vodPattern = /(?:twitch\.tv\/videos\/)(\d+)/;
+        const vodMatch = url.match(vodPattern);
+        if (vodMatch) {
+          return { type: "vod", id: vodMatch[1] };
+        }
+
+        // twitch.tv/channelname のパターン（ライブ）
+        const channelPatterns = [
           /(?:twitch\.tv\/)([^\/\s?]+)/,
           /(?:www\.twitch\.tv\/)([^\/\s?]+)/,
         ];
 
-        for (const pattern of patterns) {
+        for (const pattern of channelPatterns) {
           const match = url.match(pattern);
-          if (match) return match[1];
+          if (match && match[1] !== "videos") {
+            // 'videos'は除外
+            return { type: "channel", id: match[1] };
+          }
         }
 
         // URLでない場合、そのままチャンネル名として返す
-        return url.trim();
+        return { type: "channel", id: url.trim() };
       }
 
       function formatTime(seconds) {
@@ -454,14 +464,21 @@
         videoContainer.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
       }
 
-      function createVideoItem(videoId, platform = "youtube", isLive = true) {
+      function createVideoItem(
+        videoId,
+        platform = "youtube",
+        isLive = true,
+        twitchType = "channel"
+      ) {
         console.log(
           "Creating video item for:",
           videoId,
           "isLive:",
           isLive,
           "platform:",
-          platform
+          platform,
+          "twitchType:",
+          twitchType
         );
 
         const videoItem = document.createElement("div");
@@ -482,7 +499,15 @@
           playerDiv = document.createElement("iframe");
           playerDiv.id = `player-${videoId}`;
           const domain = window.location.hostname || "localhost";
-          playerDiv.src = `https://player.twitch.tv/?channel=${videoId}&parent=${domain}`;
+
+          if (twitchType === "vod") {
+            // VOD（アーカイブ）
+            playerDiv.src = `https://player.twitch.tv/?video=${videoId}&parent=${domain}&autoplay=false`;
+          } else {
+            // ライブチャンネル
+            playerDiv.src = `https://player.twitch.tv/?channel=${videoId}&parent=${domain}`;
+          }
+
           playerDiv.allowFullscreen = true;
           playerDiv.style.width = "100%";
           playerDiv.style.height = "100%";
@@ -641,9 +666,15 @@
           const darkMode = isDarkMode() ? 1 : 0;
 
           if (platform === "twitch") {
-            // Twitchチャット（darkpopoutパラメータでダークモード）
+            // Twitchチャット
             const twitchDark = darkMode ? "&darkpopout" : "";
-            chatIframe.src = `https://www.twitch.tv/embed/${videoId}/chat?parent=${domain}${twitchDark}`;
+            if (twitchType === "vod") {
+              // VODのチャットリプレイ
+              chatIframe.src = `https://www.twitch.tv/videos/${videoId}/chat?parent=${domain}${twitchDark}`;
+            } else {
+              // ライブチャット
+              chatIframe.src = `https://www.twitch.tv/embed/${videoId}/chat?parent=${domain}${twitchDark}`;
+            }
           } else {
             // YouTubeチャット（dark_themeパラメータでダークモード）
             chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}&embed_domain=${domain}&dark_theme=${darkMode}`;
@@ -727,15 +758,27 @@
         }
 
         let videoId;
+        let twitchType = "channel";
+        let isLive = true;
+
         if (platform === "youtube") {
           videoId = extractVideoId(urlInput);
+          isLive = isLiveStream.checked;
         } else if (platform === "twitch") {
-          videoId = extractTwitchChannel(urlInput);
+          const twitchData = extractTwitchChannel(urlInput);
+          videoId = twitchData.id;
+          twitchType = twitchData.type;
+          // VODの場合はライブではない
+          isLive = twitchType === "channel";
         }
 
         if (videoId) {
-          const isLive = platform === "twitch" ? true : isLiveStream.checked;
-          const videoItem = createVideoItem(videoId, platform, isLive);
+          const videoItem = createVideoItem(
+            videoId,
+            platform,
+            isLive,
+            twitchType
+          );
           videoContainer.appendChild(videoItem);
           adjustVideoGrid();
 
@@ -790,8 +833,15 @@
         const platform = detectPlatform(url);
 
         if (platform === "twitch") {
-          liveCheckContainer.style.display = "none";
-          isLiveStream.checked = true;
+          const twitchData = extractTwitchChannel(url);
+          // VODの場合はチェックボックスを表示
+          if (twitchData.type === "vod") {
+            liveCheckContainer.style.display = "flex";
+            isLiveStream.checked = false; // VODはライブではない
+          } else {
+            liveCheckContainer.style.display = "none";
+            isLiveStream.checked = true;
+          }
         } else if (platform === "youtube") {
           liveCheckContainer.style.display = "flex";
         }
