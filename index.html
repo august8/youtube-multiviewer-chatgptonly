@@ -288,29 +288,44 @@
     <div class="video-container" id="videoContainer"></div>
     <div class="modal" id="controlsModal">
       <div class="modal-content">
-        <input type="text" id="videoUrl" placeholder="YouTube動画のURLを入力" />
-        <div class="checkbox-container">
-          <input type="checkbox" id="showChatOnAdd" />
-          <label for="showChatOnAdd">追加時にチャットも表示</label>
-        </div>
-
-        <div class="sync-section">
-          <h3>⏱️ 一斉シーク</h3>
-          <div class="sync-input-group">
-            <input type="text" id="syncTime" placeholder="例: 15:30" />
-            <button id="syncAllBtn">全動画を移動</button>
+        <div style="margin-bottom: 15px">
+          <label style="display: block; margin-bottom: 8px; font-weight: bold"
+            >プラットフォーム選択</label
+          >
+          <div style="display: flex; gap: 10px">
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                cursor: pointer;
+              "
+            >
+              <input type="radio" name="platform" value="youtube" checked />
+              <span>YouTube</span>
+            </label>
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                cursor: pointer;
+              "
+            >
+              <input type="radio" name="platform" value="twitch" />
+              <span>Twitch</span>
+            </label>
           </div>
-          <p style="font-size: 12px; color: #aaa">
-            形式: MM:SS または HH:MM:SS
-          </p>
+        </div>
+        <input type="text" id="videoUrl" placeholder="URLを入力" />
+        <div class="checkbox-container" id="liveCheckContainer">
+          <input type="checkbox" id="isLiveStream" checked />
+          <label for="isLiveStream">ライブ配信（チャット機能を有効化）</label>
         </div>
 
         <div class="button-container">
           <button id="addVideo">追加</button>
           <button id="resetVideos" class="reset">リセット</button>
-          <button id="playAll">すべて再生</button>
-          <button id="pauseAll">すべて一時停止</button>
-          <button id="toggleAllChat">全チャット切替</button>
         </div>
         <button class="close-modal" id="closeModal">閉じる</button>
       </div>
@@ -323,11 +338,30 @@
       const controlsModal = document.getElementById("controlsModal");
       const toggleModalButton = document.getElementById("toggleModal");
       const closeModalButton = document.getElementById("closeModal");
-      const showChatOnAdd = document.getElementById("showChatOnAdd");
+      const isLiveStream = document.getElementById("isLiveStream");
+      const liveCheckContainer = document.getElementById("liveCheckContainer");
 
       let players = {};
       let playerReady = {};
       let ytApiReady = false;
+
+      // プラットフォーム切り替え時の処理
+      document.querySelectorAll('input[name="platform"]').forEach((radio) => {
+        radio.addEventListener("change", (e) => {
+          const platform = e.target.value;
+          const urlInput = document.getElementById("videoUrl");
+
+          if (platform === "youtube") {
+            urlInput.placeholder = "YouTube動画のURLを入力";
+            liveCheckContainer.style.display = "flex";
+          } else if (platform === "twitch") {
+            urlInput.placeholder =
+              "TwitchチャンネルのURLを入力 (例: twitch.tv/channelname)";
+            liveCheckContainer.style.display = "none";
+            isLiveStream.checked = true; // Twitchは常にライブ
+          }
+        });
+      });
 
       // YouTube IFrame APIの読み込み
       function loadYouTubeAPI() {
@@ -356,6 +390,22 @@
           if (match) return match[1];
         }
         return null;
+      }
+
+      function extractTwitchChannel(url) {
+        // twitch.tv/channelname のパターンを抽出
+        const patterns = [
+          /(?:twitch\.tv\/)([^\/\s?]+)/,
+          /(?:www\.twitch\.tv\/)([^\/\s?]+)/,
+        ];
+
+        for (const pattern of patterns) {
+          const match = url.match(pattern);
+          if (match) return match[1];
+        }
+
+        // URLでない場合、そのままチャンネル名として返す
+        return url.trim();
       }
 
       function formatTime(seconds) {
@@ -409,12 +459,20 @@
         videoContainer.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
       }
 
-      function createVideoItem(videoId, showChat = false) {
-        console.log("Creating video item for:", videoId);
+      function createVideoItem(videoId, platform = "youtube", isLive = true) {
+        console.log(
+          "Creating video item for:",
+          videoId,
+          "isLive:",
+          isLive,
+          "platform:",
+          platform
+        );
 
         const videoItem = document.createElement("div");
         videoItem.className = "video-item";
         videoItem.dataset.videoId = videoId;
+        videoItem.dataset.platform = platform;
 
         const videoSection = document.createElement("div");
         videoSection.className = "video-section";
@@ -422,8 +480,22 @@
         const videoWrapper = document.createElement("div");
         videoWrapper.className = "video-wrapper";
 
-        const playerDiv = document.createElement("div");
-        playerDiv.id = `player-${videoId}`;
+        let playerDiv;
+
+        if (platform === "twitch") {
+          // Twitch用のiframe
+          playerDiv = document.createElement("iframe");
+          playerDiv.id = `player-${videoId}`;
+          const domain = window.location.hostname || "localhost";
+          playerDiv.src = `https://player.twitch.tv/?channel=${videoId}&parent=${domain}`;
+          playerDiv.allowFullscreen = true;
+          playerDiv.style.width = "100%";
+          playerDiv.style.height = "100%";
+        } else {
+          // YouTube用のdiv（後でYT.Playerで初期化）
+          playerDiv = document.createElement("div");
+          playerDiv.id = `player-${videoId}`;
+        }
 
         const controlsOverlay = document.createElement("div");
         controlsOverlay.className = "controls-overlay";
@@ -431,39 +503,64 @@
         const muteButton = document.createElement("button");
         muteButton.className = "control-button mute";
         muteButton.textContent = "🔊";
-        muteButton.addEventListener("click", () => {
-          const player = players[videoId];
-          if (player && playerReady[videoId]) {
-            const isMuted = player.isMuted();
-            if (isMuted) {
-              player.unMute();
-              muteButton.textContent = "🔊";
-            } else {
-              player.mute();
-              muteButton.textContent = "🔇";
+
+        if (platform === "youtube") {
+          muteButton.addEventListener("click", () => {
+            const player = players[videoId];
+            if (player && playerReady[videoId]) {
+              const isMuted = player.isMuted();
+              if (isMuted) {
+                player.unMute();
+                muteButton.textContent = "🔊";
+              } else {
+                player.mute();
+                muteButton.textContent = "🔇";
+              }
             }
-          }
-        });
+          });
+        } else {
+          // Twitchの場合はiframe経由で制御できないので無効化
+          muteButton.style.opacity = "0.3";
+          muteButton.style.cursor = "not-allowed";
+          muteButton.title = "Twitchプレイヤーで直接操作してください";
+        }
 
         const chatButton = document.createElement("button");
         chatButton.className = "control-button chat";
         chatButton.textContent = "💬";
         chatButton.title = "チャットを開く";
-        chatButton.addEventListener("click", () => {
-          const chatWrapper = videoItem.querySelector(".chat-wrapper");
-          chatWrapper.classList.toggle("visible");
-          chatButton.classList.toggle("active");
-        });
 
-        chatButton.addEventListener("contextmenu", (e) => {
-          e.preventDefault();
-          const chatUrl = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}`;
-          window.open(
-            chatUrl,
-            `chat_${videoId}`,
-            "width=400,height=600,scrollbars=yes"
-          );
-        });
+        // ライブ配信の場合のみチャット機能を有効化
+        if (isLive) {
+          chatButton.addEventListener("click", () => {
+            const chatWrapper = videoItem.querySelector(".chat-wrapper");
+            chatWrapper.classList.toggle("visible");
+            chatButton.classList.toggle("active");
+          });
+
+          if (platform === "youtube") {
+            chatButton.addEventListener("contextmenu", (e) => {
+              e.preventDefault();
+              const chatUrl = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}`;
+              window.open(
+                chatUrl,
+                `chat_${videoId}`,
+                "width=400,height=600,scrollbars=yes"
+              );
+            });
+          }
+        } else {
+          // アーカイブの場合は無効化
+          chatButton.style.opacity = "0.3";
+          chatButton.style.cursor = "not-allowed";
+          chatButton.title = "アーカイブ動画ではチャット機能は利用できません";
+          chatButton.addEventListener("click", (e) => {
+            e.preventDefault();
+            alert(
+              "アーカイブ動画ではチャットリプレイは利用できません。\nライブ配信中の動画のみチャット機能が有効です。"
+            );
+          });
+        }
 
         const deleteButton = document.createElement("button");
         deleteButton.className = "control-button delete";
@@ -498,22 +595,42 @@
         const seek10Back = document.createElement("button");
         seek10Back.className = "seek-button";
         seek10Back.textContent = "⏮️ -10s";
-        seek10Back.addEventListener("click", () => seekVideo(videoId, -10));
+        if (platform === "youtube") {
+          seek10Back.addEventListener("click", () => seekVideo(videoId, -10));
+        } else {
+          seek10Back.style.opacity = "0.3";
+          seek10Back.style.cursor = "not-allowed";
+        }
 
         const seek5Back = document.createElement("button");
         seek5Back.className = "seek-button";
         seek5Back.textContent = "⏪ -5s";
-        seek5Back.addEventListener("click", () => seekVideo(videoId, -5));
+        if (platform === "youtube") {
+          seek5Back.addEventListener("click", () => seekVideo(videoId, -5));
+        } else {
+          seek5Back.style.opacity = "0.3";
+          seek5Back.style.cursor = "not-allowed";
+        }
 
         const seek5Forward = document.createElement("button");
         seek5Forward.className = "seek-button";
         seek5Forward.textContent = "⏩ +5s";
-        seek5Forward.addEventListener("click", () => seekVideo(videoId, 5));
+        if (platform === "youtube") {
+          seek5Forward.addEventListener("click", () => seekVideo(videoId, 5));
+        } else {
+          seek5Forward.style.opacity = "0.3";
+          seek5Forward.style.cursor = "not-allowed";
+        }
 
         const seek10Forward = document.createElement("button");
         seek10Forward.className = "seek-button";
         seek10Forward.textContent = "⏭️ +10s";
-        seek10Forward.addEventListener("click", () => seekVideo(videoId, 10));
+        if (platform === "youtube") {
+          seek10Forward.addEventListener("click", () => seekVideo(videoId, 10));
+        } else {
+          seek10Forward.style.opacity = "0.3";
+          seek10Forward.style.cursor = "not-allowed";
+        }
 
         seekButtons.appendChild(seek10Back);
         seekButtons.appendChild(seek5Back);
@@ -532,22 +649,32 @@
         videoSection.appendChild(videoWrapper);
         videoSection.appendChild(videoControls);
 
-        const chatWrapper = document.createElement("div");
-        chatWrapper.className = `chat-wrapper${showChat ? " visible" : ""}`;
+        // チャットラッパーはライブ配信の場合のみ作成（初期状態は非表示）
+        let chatWrapper = null;
+        if (isLive) {
+          chatWrapper = document.createElement("div");
+          chatWrapper.className = "chat-wrapper"; // 初期状態では visible クラスなし
 
-        const chatIframe = document.createElement("iframe");
-        const domain = window.location.hostname;
-        chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}&embed_domain=${domain}`;
-        chatIframe.allow =
-          "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+          const chatIframe = document.createElement("iframe");
+          const domain = window.location.hostname || "localhost";
 
-        chatWrapper.appendChild(chatIframe);
+          if (platform === "twitch") {
+            // Twitchチャット
+            chatIframe.src = `https://www.twitch.tv/embed/${videoId}/chat?parent=${domain}`;
+          } else {
+            // YouTubeチャット
+            chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}&embed_domain=${domain}`;
+          }
+
+          chatIframe.allow =
+            "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+
+          chatWrapper.appendChild(chatIframe);
+        }
 
         videoItem.appendChild(videoSection);
-        videoItem.appendChild(chatWrapper);
-
-        if (showChat) {
-          chatButton.classList.add("active");
+        if (chatWrapper) {
+          videoItem.appendChild(chatWrapper);
         }
 
         return videoItem;
@@ -608,19 +735,36 @@
       }
 
       document.getElementById("addVideo").addEventListener("click", () => {
-        const videoId = extractVideoId(videoUrlInput.value.trim());
+        const platform = document.querySelector(
+          'input[name="platform"]:checked'
+        ).value;
+        const urlInput = videoUrlInput.value.trim();
+
+        let videoId;
+        if (platform === "youtube") {
+          videoId = extractVideoId(urlInput);
+        } else if (platform === "twitch") {
+          videoId = extractTwitchChannel(urlInput);
+        }
+
         if (videoId) {
-          const showChat = showChatOnAdd.checked;
-          const videoItem = createVideoItem(videoId, showChat);
+          const isLive = platform === "twitch" ? true : isLiveStream.checked;
+          const videoItem = createVideoItem(videoId, platform, isLive);
           videoContainer.appendChild(videoItem);
           adjustVideoGrid();
 
-          // DOM追加後にプレイヤーを初期化
-          setTimeout(() => initializePlayer(videoId), 100);
+          // YouTubeの場合のみプレイヤーを初期化
+          if (platform === "youtube") {
+            setTimeout(() => initializePlayer(videoId), 100);
+          }
 
           videoUrlInput.value = "";
         } else {
-          alert("正しいYouTubeのURLを入力してください。");
+          alert(
+            `正しい${
+              platform === "youtube" ? "YouTube" : "Twitch"
+            }のURLを入力してください。`
+          );
         }
       });
 
@@ -632,65 +776,6 @@
         playerReady = {};
         videoContainer.innerHTML = "";
         adjustVideoGrid();
-      });
-
-      document.getElementById("playAll").addEventListener("click", () => {
-        Object.entries(players).forEach(([videoId, player]) => {
-          if (playerReady[videoId]) {
-            player.playVideo();
-          }
-        });
-      });
-
-      document.getElementById("pauseAll").addEventListener("click", () => {
-        Object.entries(players).forEach(([videoId, player]) => {
-          if (playerReady[videoId]) {
-            player.pauseVideo();
-          }
-        });
-      });
-
-      document.getElementById("syncAllBtn").addEventListener("click", () => {
-        const timeStr = document.getElementById("syncTime").value.trim();
-        if (!timeStr) {
-          alert("時間を入力してください（例: 15:30）");
-          return;
-        }
-
-        const targetSeconds = parseTime(timeStr);
-        if (targetSeconds === 0 && timeStr !== "0:00") {
-          alert("正しい時間形式で入力してください（例: 15:30 または 1:15:30）");
-          return;
-        }
-
-        Object.entries(players).forEach(([videoId, player]) => {
-          if (playerReady[videoId]) {
-            player.seekTo(targetSeconds, true);
-          }
-        });
-      });
-
-      document.getElementById("toggleAllChat").addEventListener("click", () => {
-        const allChats = document.querySelectorAll(".chat-wrapper");
-        const anyVisible = Array.from(allChats).some((chat) =>
-          chat.classList.contains("visible")
-        );
-
-        allChats.forEach((chat) => {
-          if (anyVisible) {
-            chat.classList.remove("visible");
-          } else {
-            chat.classList.add("visible");
-          }
-        });
-
-        document.querySelectorAll(".control-button.chat").forEach((btn) => {
-          if (anyVisible) {
-            btn.classList.remove("active");
-          } else {
-            btn.classList.add("active");
-          }
-        });
       });
 
       toggleModalButton.addEventListener("click", () => {
@@ -712,14 +797,6 @@
           document.getElementById("addVideo").click();
         }
       });
-
-      document
-        .getElementById("syncTime")
-        .addEventListener("keypress", (event) => {
-          if (event.key === "Enter") {
-            document.getElementById("syncAllBtn").click();
-          }
-        });
 
       window.addEventListener("resize", adjustVideoGrid);
 
