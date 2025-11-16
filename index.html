@@ -585,25 +585,49 @@
 
         // Initialize YouTube Player
         playerReady[videoId] = false;
-        players[videoId] = new YT.Player(`player-${videoId}`, {
-          videoId: videoId,
-          playerVars: {
-            enablejsapi: 1,
-            origin: window.location.origin,
-          },
-          events: {
-            onReady: (event) => {
-              playerReady[videoId] = true;
-              console.log(`Player ${videoId} ready`);
 
-              // Update time display every second
-              setInterval(() => updateTimeDisplay(videoId), 1000);
+        // YouTube APIが読み込まれているか確認
+        if (typeof YT === "undefined" || typeof YT.Player === "undefined") {
+          console.error("YouTube IFrame API not loaded yet");
+          // APIが読み込まれるまで待つ
+          const checkAPI = setInterval(() => {
+            if (typeof YT !== "undefined" && typeof YT.Player !== "undefined") {
+              clearInterval(checkAPI);
+              initPlayer(videoId);
+            }
+          }, 100);
+        } else {
+          initPlayer(videoId);
+        }
+
+        function initPlayer(vid) {
+          console.log(`Initializing player for ${vid}`);
+          players[vid] = new YT.Player(`player-${vid}`, {
+            videoId: vid,
+            playerVars: {
+              enablejsapi: 1,
+              origin: window.location.origin,
+              autoplay: 0,
             },
-            onError: (event) => {
-              console.error(`Player ${videoId} error:`, event.data);
+            events: {
+              onReady: (event) => {
+                playerReady[vid] = true;
+                console.log(`Player ${vid} ready - can now be controlled`);
+
+                // Update time display every second
+                setInterval(() => updateTimeDisplay(vid), 1000);
+              },
+              onStateChange: (event) => {
+                console.log(`Player ${vid} state:`, event.data);
+                // -1: 未開始, 0: 終了, 1: 再生中, 2: 一時停止, 3: バッファリング, 5: 頭出し済み
+              },
+              onError: (event) => {
+                console.error(`Player ${vid} error:`, event.data);
+                // 2: 無効なパラメータ, 5: HTML5エラー, 100: 動画が見つからない, 101/150: 埋め込み不可
+              },
             },
-          },
-        });
+          });
+        }
 
         return videoItem;
       }
