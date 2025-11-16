@@ -345,6 +345,14 @@
       let playerReady = {};
       let ytApiReady = false;
 
+      // ブラウザのダークモード設定を検出
+      function isDarkMode() {
+        return (
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches
+        );
+      }
+
       // プラットフォーム切り替え時の処理
       document.querySelectorAll('input[name="platform"]').forEach((radio) => {
         radio.addEventListener("change", (e) => {
@@ -541,7 +549,8 @@
           if (platform === "youtube") {
             chatButton.addEventListener("contextmenu", (e) => {
               e.preventDefault();
-              const chatUrl = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}`;
+              const darkMode = isDarkMode() ? 1 : 0;
+              const chatUrl = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}&dark_theme=${darkMode}`;
               window.open(
                 chatUrl,
                 `chat_${videoId}`,
@@ -657,13 +666,15 @@
 
           const chatIframe = document.createElement("iframe");
           const domain = window.location.hostname || "localhost";
+          const darkMode = isDarkMode() ? 1 : 0;
 
           if (platform === "twitch") {
-            // Twitchチャット
-            chatIframe.src = `https://www.twitch.tv/embed/${videoId}/chat?parent=${domain}`;
+            // Twitchチャット（darkpopoutパラメータでダークモード）
+            const twitchDark = darkMode ? "&darkpopout" : "";
+            chatIframe.src = `https://www.twitch.tv/embed/${videoId}/chat?parent=${domain}${twitchDark}`;
           } else {
-            // YouTubeチャット
-            chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}&embed_domain=${domain}`;
+            // YouTubeチャット（dark_themeパラメータでダークモード）
+            chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}&embed_domain=${domain}&dark_theme=${darkMode}`;
           }
 
           chatIframe.allow =
