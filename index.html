@@ -28,33 +28,83 @@
         width: 100vw;
         height: 100vh;
         gap: 10px;
+        padding: 10px;
+      }
+      .video-item {
+        display: flex;
+        gap: 10px;
+        background: #1a1a1a;
+        border-radius: 8px;
+        overflow: hidden;
+        min-width: 0;
       }
       .video-wrapper {
         position: relative;
         background: #000;
-        max-width: 100%;
-        max-height: 100%;
-        aspect-ratio: 16 / 9;
+        flex: 1;
+        min-width: 0;
       }
       .video-wrapper iframe {
         width: 100%;
         height: 100%;
         border: none;
       }
-      .delete-button {
+      .chat-wrapper {
+        position: relative;
+        background: #1a1a1a;
+        width: 340px;
+        min-width: 280px;
+        display: none;
+      }
+      .chat-wrapper.visible {
+        display: block;
+      }
+      .chat-wrapper iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+      .controls-overlay {
         position: absolute;
         top: 5px;
         right: 5px;
-        background: #dc3545;
+        display: flex;
+        gap: 5px;
+        z-index: 10;
+      }
+      .control-button {
+        background: rgba(0, 0, 0, 0.7);
         color: white;
         border: none;
         border-radius: 4px;
         padding: 5px 10px;
         cursor: pointer;
-        z-index: 10;
+        font-size: 12px;
+        backdrop-filter: blur(4px);
       }
-      .delete-button:hover {
-        background: #a71d2a;
+      .control-button:hover {
+        background: rgba(0, 0, 0, 0.9);
+      }
+      .control-button.delete {
+        background: rgba(220, 53, 69, 0.8);
+      }
+      .control-button.delete:hover {
+        background: rgba(220, 53, 69, 1);
+      }
+      .control-button.chat {
+        background: rgba(0, 123, 255, 0.8);
+      }
+      .control-button.chat:hover {
+        background: rgba(0, 123, 255, 1);
+      }
+      .control-button.chat.active {
+        background: rgba(40, 167, 69, 0.8);
+      }
+      .control-button.mute {
+        background: rgba(108, 117, 125, 0.8);
+      }
+      .control-button.mute:hover {
+        background: rgba(108, 117, 125, 1);
       }
       .modal {
         display: none;
@@ -89,6 +139,16 @@
         border-radius: 4px;
         width: 100%;
         margin-bottom: 10px;
+      }
+      .modal-content .checkbox-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .modal-content .checkbox-container input[type="checkbox"] {
+        width: auto;
+        margin: 0;
       }
       .modal-content .button-container {
         display: flex;
@@ -134,6 +194,8 @@
         color: #fff;
         cursor: pointer;
         z-index: 1000;
+        width: 50px;
+        height: 50px;
       }
       .toggle-modal:hover {
         background: #0056b3;
@@ -145,12 +207,16 @@
     <div class="modal" id="controlsModal">
       <div class="modal-content">
         <input type="text" id="videoUrl" placeholder="YouTube動画のURLを入力" />
+        <div class="checkbox-container">
+          <input type="checkbox" id="showChatOnAdd" />
+          <label for="showChatOnAdd">追加時にチャットも表示</label>
+        </div>
         <div class="button-container">
           <button id="addVideo">追加</button>
           <button id="resetVideos" class="reset">リセット</button>
           <button id="playAll">すべて再生</button>
           <button id="pauseAll">すべて一時停止</button>
-          <button id="muteAll">すべてミュート</button>
+          <button id="toggleAllChat">全チャット切替</button>
         </div>
         <button class="close-modal" id="closeModal">閉じる</button>
       </div>
@@ -163,56 +229,121 @@
       const controlsModal = document.getElementById("controlsModal");
       const toggleModalButton = document.getElementById("toggleModal");
       const closeModalButton = document.getElementById("closeModal");
+      const showChatOnAdd = document.getElementById("showChatOnAdd");
 
       function extractVideoId(url) {
-        const match = url.match(
-          /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/
-        );
-        return match ? match[1] : null;
+        const patterns = [
+          /(?:youtube\.com\/watch\?v=)([^&\s]+)/,
+          /(?:youtu\.be\/)([^&\s?]+)/,
+          /(?:youtube\.com\/live\/)([^&\s?]+)/,
+          /(?:youtube\.com\/embed\/)([^&\s?]+)/,
+        ];
+
+        for (const pattern of patterns) {
+          const match = url.match(pattern);
+          if (match) return match[1];
+        }
+        return null;
       }
 
       function adjustVideoGrid() {
         const videoCount = videoContainer.children.length;
         if (videoCount === 0) return;
 
-        const aspectRatio = 16 / 9;
-        const containerWidth = window.innerWidth;
-        const containerHeight = window.innerHeight;
+        const containerWidth = window.innerWidth - 20;
+        const containerHeight = window.innerHeight - 20;
 
         let cols = videoCount === 1 ? 1 : Math.ceil(Math.sqrt(videoCount));
         let rows = Math.ceil(videoCount / cols);
 
-        const maxVideoWidth = containerWidth / cols;
-        const maxVideoHeight = containerHeight / rows;
+        videoContainer.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        videoContainer.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+      }
 
-        videoContainer.style.gridTemplateColumns = `repeat(${cols}, ${Math.min(
-          maxVideoWidth,
-          maxVideoHeight * aspectRatio
-        )}px)`;
-        videoContainer.style.gridTemplateRows = `repeat(${rows}, auto)`;
+      function createVideoItem(videoId, showChat = false) {
+        const videoItem = document.createElement("div");
+        videoItem.className = "video-item";
+        videoItem.dataset.videoId = videoId;
+
+        const videoWrapper = document.createElement("div");
+        videoWrapper.className = "video-wrapper";
+
+        const videoIframe = document.createElement("iframe");
+        videoIframe.src = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
+        videoIframe.allowFullscreen = true;
+
+        const controlsOverlay = document.createElement("div");
+        controlsOverlay.className = "controls-overlay";
+
+        const muteButton = document.createElement("button");
+        muteButton.className = "control-button mute";
+        muteButton.textContent = "🔊";
+        muteButton.dataset.muted = "false";
+        muteButton.addEventListener("click", () => {
+          const isMuted = muteButton.dataset.muted === "true";
+          videoIframe.contentWindow.postMessage(
+            JSON.stringify({
+              event: "command",
+              func: isMuted ? "unMute" : "mute",
+              args: "",
+            }),
+            "*"
+          );
+          muteButton.dataset.muted = (!isMuted).toString();
+          muteButton.textContent = isMuted ? "🔊" : "🔇";
+        });
+
+        const chatButton = document.createElement("button");
+        chatButton.className = "control-button chat";
+        chatButton.textContent = "💬";
+        chatButton.addEventListener("click", () => {
+          const chatWrapper = videoItem.querySelector(".chat-wrapper");
+          chatWrapper.classList.toggle("visible");
+          chatButton.classList.toggle("active");
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "control-button delete";
+        deleteButton.textContent = "✕";
+        deleteButton.addEventListener("click", () => {
+          videoItem.remove();
+          adjustVideoGrid();
+        });
+
+        controlsOverlay.appendChild(muteButton);
+        controlsOverlay.appendChild(chatButton);
+        controlsOverlay.appendChild(deleteButton);
+
+        videoWrapper.appendChild(videoIframe);
+        videoWrapper.appendChild(controlsOverlay);
+
+        const chatWrapper = document.createElement("div");
+        chatWrapper.className = `chat-wrapper${showChat ? " visible" : ""}`;
+
+        const chatIframe = document.createElement("iframe");
+        // embed_domainパラメータを削除してシンプルに
+        chatIframe.src = `https://www.youtube.com/live_chat?v=${videoId}`;
+        chatIframe.allow =
+          "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+
+        chatWrapper.appendChild(chatIframe);
+
+        videoItem.appendChild(videoWrapper);
+        videoItem.appendChild(chatWrapper);
+
+        if (showChat) {
+          chatButton.classList.add("active");
+        }
+
+        return videoItem;
       }
 
       document.getElementById("addVideo").addEventListener("click", () => {
         const videoId = extractVideoId(videoUrlInput.value.trim());
         if (videoId) {
-          const videoWrapper = document.createElement("div");
-          videoWrapper.className = "video-wrapper";
-
-          const iframe = document.createElement("iframe");
-          iframe.src = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
-          iframe.allowFullscreen = true;
-
-          const deleteButton = document.createElement("button");
-          deleteButton.className = "delete-button";
-          deleteButton.textContent = "削除";
-          deleteButton.addEventListener("click", () => {
-            videoWrapper.remove();
-            adjustVideoGrid();
-          });
-
-          videoWrapper.appendChild(iframe);
-          videoWrapper.appendChild(deleteButton);
-          videoContainer.appendChild(videoWrapper);
+          const showChat = showChatOnAdd.checked;
+          const videoItem = createVideoItem(videoId, showChat);
+          videoContainer.appendChild(videoItem);
           adjustVideoGrid();
           videoUrlInput.value = "";
         } else {
@@ -226,29 +357,51 @@
       });
 
       document.getElementById("playAll").addEventListener("click", () => {
-        document.querySelectorAll("iframe").forEach((iframe) => {
+        document.querySelectorAll(".video-wrapper iframe").forEach((iframe) => {
           iframe.contentWindow.postMessage(
-            '{"event":"command","func":"playVideo","args":""}',
+            JSON.stringify({
+              event: "command",
+              func: "playVideo",
+              args: "",
+            }),
             "*"
           );
         });
       });
 
       document.getElementById("pauseAll").addEventListener("click", () => {
-        document.querySelectorAll("iframe").forEach((iframe) => {
+        document.querySelectorAll(".video-wrapper iframe").forEach((iframe) => {
           iframe.contentWindow.postMessage(
-            '{"event":"command","func":"pauseVideo","args":""}',
+            JSON.stringify({
+              event: "command",
+              func: "pauseVideo",
+              args: "",
+            }),
             "*"
           );
         });
       });
 
-      document.getElementById("muteAll").addEventListener("click", () => {
-        document.querySelectorAll("iframe").forEach((iframe) => {
-          iframe.contentWindow.postMessage(
-            '{"event":"command","func":"mute","args":""}',
-            "*"
-          );
+      document.getElementById("toggleAllChat").addEventListener("click", () => {
+        const allChats = document.querySelectorAll(".chat-wrapper");
+        const anyVisible = Array.from(allChats).some((chat) =>
+          chat.classList.contains("visible")
+        );
+
+        allChats.forEach((chat) => {
+          if (anyVisible) {
+            chat.classList.remove("visible");
+          } else {
+            chat.classList.add("visible");
+          }
+        });
+
+        document.querySelectorAll(".control-button.chat").forEach((btn) => {
+          if (anyVisible) {
+            btn.classList.remove("active");
+          } else {
+            btn.classList.add("active");
+          }
         });
       });
 
@@ -263,6 +416,12 @@
       controlsModal.addEventListener("click", (event) => {
         if (event.target === controlsModal) {
           controlsModal.classList.remove("visible");
+        }
+      });
+
+      videoUrlInput.addEventListener("keypress", (event) => {
+        if (event.key === "Enter") {
+          document.getElementById("addVideo").click();
         }
       });
 
