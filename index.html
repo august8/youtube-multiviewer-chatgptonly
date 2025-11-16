@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="frame-src https://www.youtube.com https://www.youtube-nocookie.com;"
+    />
     <title>Youtubeの動画を同時に見るやつ</title>
     <style>
       * {
@@ -307,10 +311,41 @@
         const chatButton = document.createElement("button");
         chatButton.className = "control-button chat";
         chatButton.textContent = "💬";
+        chatButton.title = "チャットを開く";
         chatButton.addEventListener("click", () => {
+          // iframe埋め込みを試みる
           const chatWrapper = videoItem.querySelector(".chat-wrapper");
-          chatWrapper.classList.toggle("visible");
-          chatButton.classList.toggle("active");
+          const wasVisible = chatWrapper.classList.contains("visible");
+
+          if (!wasVisible) {
+            // 初回クリック時：iframeで表示を試みる
+            chatWrapper.classList.add("visible");
+            chatButton.classList.add("active");
+
+            // エラーが発生する可能性があるため、別ウィンドウで開くオプションも提供
+            setTimeout(() => {
+              const chatIframe = chatWrapper.querySelector("iframe");
+              if (chatIframe) {
+                // iframeのロード状態をチェック（簡易版）
+                chatButton.title = "別ウィンドウで開く（右クリック）";
+              }
+            }, 1000);
+          } else {
+            // 2回目以降：トグル動作
+            chatWrapper.classList.remove("visible");
+            chatButton.classList.remove("active");
+          }
+        });
+
+        // 右クリックで別ウィンドウで開く
+        chatButton.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          const chatUrl = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}`;
+          window.open(
+            chatUrl,
+            `chat_${videoId}`,
+            "width=400,height=600,scrollbars=yes"
+          );
         });
 
         const deleteButton = document.createElement("button");
@@ -332,8 +367,9 @@
         chatWrapper.className = `chat-wrapper${showChat ? " visible" : ""}`;
 
         const chatIframe = document.createElement("iframe");
-        // ポップアウト形式のURL（is_popout=1が必須）
-        chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}`;
+        // 埋め込み元ドメインを明示的に指定
+        const domain = window.location.hostname;
+        chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}&embed_domain=${domain}`;
         chatIframe.allow =
           "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
 
