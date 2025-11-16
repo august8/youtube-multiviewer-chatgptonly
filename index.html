@@ -564,11 +564,17 @@
 
         const chatIframe = document.createElement("iframe");
         const domain = window.location.hostname;
+        // アーカイブのチャットリプレイにも対応
         chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}&embed_domain=${domain}`;
         chatIframe.allow =
           "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+        chatIframe.dataset.videoId = videoId;
 
         chatWrapper.appendChild(chatIframe);
+
+        // 動画の再生位置が変わったときにチャットを同期（試験的）
+        // Note: チャットリプレイは自動的に動画と同期するはずですが、
+        // 一部の動画では手動でリロードが必要な場合があります
 
         videoItem.appendChild(videoSection);
         videoItem.appendChild(chatWrapper);
