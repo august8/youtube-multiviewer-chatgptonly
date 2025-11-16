@@ -196,42 +196,6 @@
         width: auto;
         margin: 0;
       }
-      .sync-section {
-        background: #2a2a2a;
-        padding: 15px;
-        border-radius: 6px;
-        margin-bottom: 10px;
-      }
-      .sync-section h3 {
-        font-size: 14px;
-        margin-bottom: 10px;
-        color: #4a9eff;
-      }
-      .sync-input-group {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        margin-bottom: 10px;
-      }
-      .sync-input-group input {
-        padding: 8px;
-        font-size: 14px;
-        border: none;
-        border-radius: 4px;
-        width: 100px;
-      }
-      .sync-input-group button {
-        padding: 8px 12px;
-        font-size: 14px;
-        border: none;
-        border-radius: 4px;
-        background: #28a745;
-        color: #fff;
-        cursor: pointer;
-      }
-      .sync-input-group button:hover {
-        background: #218838;
-      }
       .modal-content .button-container {
         display: flex;
         flex-wrap: wrap;
@@ -313,13 +277,14 @@
             color: #888;
           "
         >
-          v1.3.0
+          v1.3.1
         </div>
       </div>
     </div>
     <button class="toggle-modal" id="toggleModal">☰</button>
 
     <script>
+      // グローバル変数とユーティリティ関数を最初に定義
       const videoContainer = document.getElementById("videoContainer");
       const videoUrlInput = document.getElementById("videoUrl");
       const controlsModal = document.getElementById("controlsModal");
@@ -332,7 +297,7 @@
       let playerReady = {};
       let ytApiReady = false;
 
-      // ブラウザのダークモード設定を検出
+      // ユーティリティ関数（イベントリスナーより先に定義）
       function isDarkMode() {
         return (
           window.matchMedia &&
@@ -340,37 +305,14 @@
         );
       }
 
-      // プラットフォーム切り替え時の処理
-      document.querySelectorAll('input[name="platform"]').forEach((radio) => {
-        radio.addEventListener("change", (e) => {
-          const platform = e.target.value;
-          const urlInput = document.getElementById("videoUrl");
-
-          if (platform === "youtube") {
-            urlInput.placeholder = "YouTube動画のURLを入力";
-            liveCheckContainer.style.display = "flex";
-          } else if (platform === "twitch") {
-            urlInput.placeholder =
-              "TwitchチャンネルのURLを入力 (例: twitch.tv/channelname)";
-            liveCheckContainer.style.display = "none";
-            isLiveStream.checked = true; // Twitchは常にライブ
-          }
-        });
-      });
-
-      // YouTube IFrame APIの読み込み
-      function loadYouTubeAPI() {
-        const tag = document.createElement("script");
-        tag.src = "https://www.youtube.com/iframe_api";
-        const firstScriptTag = document.getElementsByTagName("script")[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+      function detectPlatform(url) {
+        if (url.includes("youtube.com") || url.includes("youtu.be")) {
+          return "youtube";
+        } else if (url.includes("twitch.tv")) {
+          return "twitch";
+        }
+        return null;
       }
-
-      // APIが読み込まれたときのコールバック
-      window.onYouTubeIframeAPIReady = function () {
-        console.log("YouTube IFrame API Ready");
-        ytApiReady = true;
-      };
 
       function extractVideoId(url) {
         const patterns = [
@@ -388,14 +330,12 @@
       }
 
       function extractTwitchChannel(url) {
-        // twitch.tv/videos/12345 のパターン（VOD）
         const vodPattern = /(?:twitch\.tv\/videos\/)(\d+)/;
         const vodMatch = url.match(vodPattern);
         if (vodMatch) {
           return { type: "vod", id: vodMatch[1] };
         }
 
-        // twitch.tv/channelname のパターン（ライブ）
         const channelPatterns = [
           /(?:twitch\.tv\/)([^\/\s?]+)/,
           /(?:www\.twitch\.tv\/)([^\/\s?]+)/,
@@ -404,12 +344,10 @@
         for (const pattern of channelPatterns) {
           const match = url.match(pattern);
           if (match && match[1] !== "videos") {
-            // 'videos'は除外
             return { type: "channel", id: match[1] };
           }
         }
 
-        // URLでない場合、そのままチャンネル名として返す
         return { type: "channel", id: url.trim() };
       }
 
@@ -424,16 +362,6 @@
             .padStart(2, "0")}`;
         }
         return `${m}:${s.toString().padStart(2, "0")}`;
-      }
-
-      function parseTime(timeStr) {
-        const parts = timeStr.split(":").map((p) => parseInt(p, 10));
-        if (parts.length === 2) {
-          return parts[0] * 60 + parts[1];
-        } else if (parts.length === 3) {
-          return parts[0] * 3600 + parts[1] * 60 + parts[2];
-        }
-        return 0;
       }
 
       function updateTimeDisplay(videoId) {
@@ -464,23 +392,21 @@
         videoContainer.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
       }
 
+      function seekVideo(videoId, seconds) {
+        const player = players[videoId];
+        if (player && playerReady[videoId]) {
+          const currentTime = player.getCurrentTime();
+          const newTime = Math.max(0, currentTime + seconds);
+          player.seekTo(newTime, true);
+        }
+      }
+
       function createVideoItem(
         videoId,
         platform = "youtube",
         isLive = true,
         twitchType = "channel"
       ) {
-        console.log(
-          "Creating video item for:",
-          videoId,
-          "isLive:",
-          isLive,
-          "platform:",
-          platform,
-          "twitchType:",
-          twitchType
-        );
-
         const videoItem = document.createElement("div");
         videoItem.className = "video-item";
         videoItem.dataset.videoId = videoId;
@@ -495,16 +421,13 @@
         let playerDiv;
 
         if (platform === "twitch") {
-          // Twitch用のiframe
           playerDiv = document.createElement("iframe");
           playerDiv.id = `player-${videoId}`;
           const domain = window.location.hostname || "localhost";
 
           if (twitchType === "vod") {
-            // VOD（アーカイブ）
             playerDiv.src = `https://player.twitch.tv/?video=${videoId}&parent=${domain}&autoplay=false`;
           } else {
-            // ライブチャンネル
             playerDiv.src = `https://player.twitch.tv/?channel=${videoId}&parent=${domain}`;
           }
 
@@ -512,7 +435,6 @@
           playerDiv.style.width = "100%";
           playerDiv.style.height = "100%";
         } else {
-          // YouTube用のdiv（後でYT.Playerで初期化）
           playerDiv = document.createElement("div");
           playerDiv.id = `player-${videoId}`;
         }
@@ -539,7 +461,6 @@
             }
           });
         } else {
-          // Twitchの場合はiframe経由で制御できないので無効化
           muteButton.style.opacity = "0.3";
           muteButton.style.cursor = "not-allowed";
           muteButton.title = "Twitchプレイヤーで直接操作してください";
@@ -550,7 +471,6 @@
         chatButton.textContent = "💬";
         chatButton.title = "チャットを開く";
 
-        // ライブ配信の場合のみチャット機能を有効化
         if (isLive) {
           chatButton.addEventListener("click", () => {
             const chatWrapper = videoItem.querySelector(".chat-wrapper");
@@ -571,7 +491,6 @@
             });
           }
         } else {
-          // アーカイブの場合は無効化
           chatButton.style.opacity = "0.3";
           chatButton.style.cursor = "not-allowed";
           chatButton.title = "アーカイブ動画ではチャット機能は利用できません";
@@ -603,7 +522,6 @@
         videoWrapper.appendChild(playerDiv);
         videoWrapper.appendChild(controlsOverlay);
 
-        // Video controls（YouTubeの場合のみ表示）
         if (platform === "youtube") {
           const videoControls = document.createElement("div");
           videoControls.className = "video-controls";
@@ -651,32 +569,26 @@
           videoSection.appendChild(videoWrapper);
           videoSection.appendChild(videoControls);
         } else {
-          // Twitchの場合はコントロールなし
           videoSection.appendChild(videoWrapper);
         }
 
-        // チャットラッパーはライブ配信の場合のみ作成（初期状態は非表示）
         let chatWrapper = null;
         if (isLive) {
           chatWrapper = document.createElement("div");
-          chatWrapper.className = "chat-wrapper"; // 初期状態では visible クラスなし
+          chatWrapper.className = "chat-wrapper";
 
           const chatIframe = document.createElement("iframe");
           const domain = window.location.hostname || "localhost";
           const darkMode = isDarkMode() ? 1 : 0;
 
           if (platform === "twitch") {
-            // Twitchチャット
             const twitchDark = darkMode ? "&darkpopout" : "";
             if (twitchType === "vod") {
-              // VODのチャットリプレイ
               chatIframe.src = `https://www.twitch.tv/videos/${videoId}/chat?parent=${domain}${twitchDark}`;
             } else {
-              // ライブチャット
               chatIframe.src = `https://www.twitch.tv/embed/${videoId}/chat?parent=${domain}${twitchDark}`;
             }
           } else {
-            // YouTubeチャット（dark_themeパラメータでダークモード）
             chatIframe.src = `https://www.youtube.com/live_chat?is_popout=1&v=${videoId}&embed_domain=${domain}&dark_theme=${darkMode}`;
           }
 
@@ -696,12 +608,10 @@
 
       function initializePlayer(videoId) {
         if (!ytApiReady) {
-          console.log("YouTube API not ready yet, waiting...");
           setTimeout(() => initializePlayer(videoId), 200);
           return;
         }
 
-        console.log(`Initializing player for ${videoId}`);
         playerReady[videoId] = false;
 
         try {
@@ -717,14 +627,9 @@
             events: {
               onReady: (event) => {
                 playerReady[videoId] = true;
-                console.log(`Player ${videoId} is ready`);
                 setInterval(() => updateTimeDisplay(videoId), 1000);
               },
-              onStateChange: (event) => {
-                console.log(`Player ${videoId} state changed:`, event.data);
-              },
               onError: (event) => {
-                console.error(`Player ${videoId} error:`, event.data);
                 alert(
                   `動画の読み込みエラー (Code: ${event.data})\n100: 動画が見つかりません\n101/150: 埋め込みが許可されていません`
                 );
@@ -736,18 +641,19 @@
         }
       }
 
-      function seekVideo(videoId, seconds) {
-        const player = players[videoId];
-        if (player && playerReady[videoId]) {
-          const currentTime = player.getCurrentTime();
-          const newTime = Math.max(0, currentTime + seconds);
-          player.seekTo(newTime, true);
-          console.log(`Seeking ${videoId} to ${newTime}s`);
-        } else {
-          console.log(`Player ${videoId} not ready for seeking`);
-        }
+      // YouTube IFrame APIの読み込み
+      function loadYouTubeAPI() {
+        const tag = document.createElement("script");
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName("script")[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
       }
 
+      window.onYouTubeIframeAPIReady = function () {
+        ytApiReady = true;
+      };
+
+      // イベントリスナー（すべての関数定義の後に配置）
       document.getElementById("addVideo").addEventListener("click", () => {
         const urlInput = videoUrlInput.value.trim();
         const platform = detectPlatform(urlInput);
@@ -768,7 +674,6 @@
           const twitchData = extractTwitchChannel(urlInput);
           videoId = twitchData.id;
           twitchType = twitchData.type;
-          // VODの場合はライブではない
           isLive = twitchType === "channel";
         }
 
@@ -782,7 +687,6 @@
           videoContainer.appendChild(videoItem);
           adjustVideoGrid();
 
-          // YouTubeの場合のみプレイヤーを初期化
           if (platform === "youtube") {
             setTimeout(() => initializePlayer(videoId), 100);
           }
@@ -827,17 +731,15 @@
         }
       });
 
-      // Twitchの場合はライブ配信チェックボックスを非表示にする
       videoUrlInput.addEventListener("input", (event) => {
         const url = event.target.value.trim();
         const platform = detectPlatform(url);
 
         if (platform === "twitch") {
           const twitchData = extractTwitchChannel(url);
-          // VODの場合はチェックボックスを表示
           if (twitchData.type === "vod") {
             liveCheckContainer.style.display = "flex";
-            isLiveStream.checked = false; // VODはライブではない
+            isLiveStream.checked = false;
           } else {
             liveCheckContainer.style.display = "none";
             isLiveStream.checked = true;
@@ -849,7 +751,6 @@
 
       window.addEventListener("resize", adjustVideoGrid);
 
-      // YouTube API読み込み開始
       loadYouTubeAPI();
     </script>
   </body>
