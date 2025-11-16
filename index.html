@@ -288,36 +288,11 @@
     <div class="video-container" id="videoContainer"></div>
     <div class="modal" id="controlsModal">
       <div class="modal-content">
-        <div style="margin-bottom: 15px">
-          <label style="display: block; margin-bottom: 8px; font-weight: bold"
-            >プラットフォーム選択</label
-          >
-          <div style="display: flex; gap: 10px">
-            <label
-              style="
-                display: flex;
-                align-items: center;
-                gap: 5px;
-                cursor: pointer;
-              "
-            >
-              <input type="radio" name="platform" value="youtube" checked />
-              <span>YouTube</span>
-            </label>
-            <label
-              style="
-                display: flex;
-                align-items: center;
-                gap: 5px;
-                cursor: pointer;
-              "
-            >
-              <input type="radio" name="platform" value="twitch" />
-              <span>Twitch</span>
-            </label>
-          </div>
-        </div>
-        <input type="text" id="videoUrl" placeholder="URLを入力" />
+        <input
+          type="text"
+          id="videoUrl"
+          placeholder="YouTube または Twitch の URL を入力"
+        />
         <div class="checkbox-container" id="liveCheckContainer">
           <input type="checkbox" id="isLiveStream" checked />
           <label for="isLiveStream">ライブ配信（チャット機能を有効化）</label>
@@ -338,7 +313,7 @@
             color: #888;
           "
         >
-          v1.0.0
+          v1.2.0
         </div>
       </div>
     </div>
@@ -603,72 +578,57 @@
         videoWrapper.appendChild(playerDiv);
         videoWrapper.appendChild(controlsOverlay);
 
-        // Video controls
-        const videoControls = document.createElement("div");
-        videoControls.className = "video-controls";
-
-        const controlRow1 = document.createElement("div");
-        controlRow1.className = "control-row";
-
-        const seekButtons = document.createElement("div");
-        seekButtons.className = "seek-buttons";
-
-        const seek10Back = document.createElement("button");
-        seek10Back.className = "seek-button";
-        seek10Back.textContent = "⏮️ -10s";
+        // Video controls（YouTubeの場合のみ表示）
         if (platform === "youtube") {
+          const videoControls = document.createElement("div");
+          videoControls.className = "video-controls";
+
+          const controlRow1 = document.createElement("div");
+          controlRow1.className = "control-row";
+
+          const seekButtons = document.createElement("div");
+          seekButtons.className = "seek-buttons";
+
+          const seek10Back = document.createElement("button");
+          seek10Back.className = "seek-button";
+          seek10Back.textContent = "⏮️ -10s";
           seek10Back.addEventListener("click", () => seekVideo(videoId, -10));
-        } else {
-          seek10Back.style.opacity = "0.3";
-          seek10Back.style.cursor = "not-allowed";
-        }
 
-        const seek5Back = document.createElement("button");
-        seek5Back.className = "seek-button";
-        seek5Back.textContent = "⏪ -5s";
-        if (platform === "youtube") {
+          const seek5Back = document.createElement("button");
+          seek5Back.className = "seek-button";
+          seek5Back.textContent = "⏪ -5s";
           seek5Back.addEventListener("click", () => seekVideo(videoId, -5));
-        } else {
-          seek5Back.style.opacity = "0.3";
-          seek5Back.style.cursor = "not-allowed";
-        }
 
-        const seek5Forward = document.createElement("button");
-        seek5Forward.className = "seek-button";
-        seek5Forward.textContent = "⏩ +5s";
-        if (platform === "youtube") {
+          const seek5Forward = document.createElement("button");
+          seek5Forward.className = "seek-button";
+          seek5Forward.textContent = "⏩ +5s";
           seek5Forward.addEventListener("click", () => seekVideo(videoId, 5));
-        } else {
-          seek5Forward.style.opacity = "0.3";
-          seek5Forward.style.cursor = "not-allowed";
-        }
 
-        const seek10Forward = document.createElement("button");
-        seek10Forward.className = "seek-button";
-        seek10Forward.textContent = "⏭️ +10s";
-        if (platform === "youtube") {
+          const seek10Forward = document.createElement("button");
+          seek10Forward.className = "seek-button";
+          seek10Forward.textContent = "⏭️ +10s";
           seek10Forward.addEventListener("click", () => seekVideo(videoId, 10));
+
+          seekButtons.appendChild(seek10Back);
+          seekButtons.appendChild(seek5Back);
+          seekButtons.appendChild(seek5Forward);
+          seekButtons.appendChild(seek10Forward);
+
+          const timeDisplay = document.createElement("div");
+          timeDisplay.className = "time-display";
+          timeDisplay.textContent = "0:00";
+
+          controlRow1.appendChild(seekButtons);
+          controlRow1.appendChild(timeDisplay);
+
+          videoControls.appendChild(controlRow1);
+
+          videoSection.appendChild(videoWrapper);
+          videoSection.appendChild(videoControls);
         } else {
-          seek10Forward.style.opacity = "0.3";
-          seek10Forward.style.cursor = "not-allowed";
+          // Twitchの場合はコントロールなし
+          videoSection.appendChild(videoWrapper);
         }
-
-        seekButtons.appendChild(seek10Back);
-        seekButtons.appendChild(seek5Back);
-        seekButtons.appendChild(seek5Forward);
-        seekButtons.appendChild(seek10Forward);
-
-        const timeDisplay = document.createElement("div");
-        timeDisplay.className = "time-display";
-        timeDisplay.textContent = "0:00";
-
-        controlRow1.appendChild(seekButtons);
-        controlRow1.appendChild(timeDisplay);
-
-        videoControls.appendChild(controlRow1);
-
-        videoSection.appendChild(videoWrapper);
-        videoSection.appendChild(videoControls);
 
         // チャットラッパーはライブ配信の場合のみ作成（初期状態は非表示）
         let chatWrapper = null;
@@ -758,10 +718,13 @@
       }
 
       document.getElementById("addVideo").addEventListener("click", () => {
-        const platform = document.querySelector(
-          'input[name="platform"]:checked'
-        ).value;
         const urlInput = videoUrlInput.value.trim();
+        const platform = detectPlatform(urlInput);
+
+        if (!platform) {
+          alert("YouTube または Twitch の URL を入力してください。");
+          return;
+        }
 
         let videoId;
         if (platform === "youtube") {
@@ -818,6 +781,19 @@
       videoUrlInput.addEventListener("keypress", (event) => {
         if (event.key === "Enter") {
           document.getElementById("addVideo").click();
+        }
+      });
+
+      // Twitchの場合はライブ配信チェックボックスを非表示にする
+      videoUrlInput.addEventListener("input", (event) => {
+        const url = event.target.value.trim();
+        const platform = detectPlatform(url);
+
+        if (platform === "twitch") {
+          liveCheckContainer.style.display = "none";
+          isLiveStream.checked = true;
+        } else if (platform === "youtube") {
+          liveCheckContainer.style.display = "flex";
         }
       });
 
